@@ -1,0 +1,400 @@
+<html><head>
+    <title>SpaceShip</title>
+    <meta http-equiv="content-type" content="text/html; charset=windows-1252">
+
+    <script type="text/javascript" src="gl-matrix.js"></script>
+    <script type="text/javascript" src="game-utils.js"></script>
+    <script type="text/javascript" src="fbo.js"></script>
+    <script type="text/javascript" src="background.js"></script>
+    <script type="text/javascript" src="modelObj.js"></script>
+    <script type="text/javascript" src="enemy.js"></script>
+    <script type="text/javascript" src="splat.js"></script>
+
+    <script id="background-vs" type="x-shader/x-vertex">#version 300 es
+      // *** le vertex shader ***
+      layout(location=0) in vec3 aVertexPosition; // la position du sommet
+      layout(location=1) in vec2 aVertexCoord; // sa coordonnee de texture
+
+      out vec2 vTextureCoord; // on souhaite rasteriser la coordonnee
+
+      void main(void) {
+          // projection de la position
+          gl_Position = vec4(aVertexPosition, 1.0);
+
+          // stockage de la coordonnee de texture
+          vTextureCoord = aVertexCoord;
+      }
+    </script>
+
+    <script id="background-fs" type="x-shader/x-fragment">#version 300 es
+      // *** le fragment shader ***
+      precision highp float; // precision des nombres flottant
+
+      uniform vec2 uOffset;
+      uniform float uAmplitude; // amplitude du bruit
+      uniform float uFrequency; // frequence du bruit
+      uniform float uPersistence; // persistence du bruit
+
+      in vec2 vTextureCoord; // recuperation de la coord rasterisee
+      out vec4 outColor;
+
+      vec2 hash22(vec2 p) {
+        vec2 q = vec2(dot(p,vec2(127.1,311.7)),
+        dot(p,vec2(269.5,183.3)));
+        return fract(sin(q)*43758.5453123)*2.-1.;
+      }
+
+      float gnoise(in vec2 x) {
+    	  vec2 p = floor(x);
+    	  vec2 f = fract(x);
+    	  vec2 m = f*f*(3.-2.*f);
+
+    	  return mix(
+          mix(dot(hash22(p+vec2(0.,0.)),f-vec2(0.,0.)),
+          dot(hash22(p+vec2(1.,0.)),f-vec2(1.,0.)),m.x),
+          mix(dot(hash22(p+vec2(0.,1.)),f-vec2(0.,1.)),
+          dot(hash22(p+vec2(1.,1.)),f-vec2(1.,1.)),m.x),m.y);
+      }
+
+      float fractalNoise(in vec2 p) {
+     	  const int nb = 5; // nb octave
+     	  float f = uFrequency; // frequency
+     	  float a = uAmplitude; // amplitude
+     	  float e = uPersistence; // persistence
+
+     	  float n = 0.0;
+     	  for(int i=0;i<nb;++i) {
+            n = n + a*gnoise(p*f);
+            f = 2.0*f;
+            a = a*e;
+     	  }
+     	  return n;
+      }
+
+      float random (vec2 st) {
+          return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
+      }
+
+      float computeHeight(in vec2 p) {
+        // vous pouvez modifier cette fonction comme vous
+        // le souhaitez pour fabriquer votre propre background
+        return fractalNoise(p)*0.3+0.05;
+      }
+
+      vec3 computeNormal(in vec2 p) {
+    	  float scale = 70.0;
+    	  float xp = computeHeight(p+vec2( 0.001,0.0));
+    	  float xm = computeHeight(p+vec2(-0.001,0.0));
+    	  float yp = computeHeight(p+vec2(0.0, 0.001));
+    	  float ym = computeHeight(p+vec2(0.0,-0.001));
+
+    	  float gx = 0.5*(xp-xm)*scale;
+    	  float gy = 0.5*(yp-ym)*scale;
+
+    	  vec3 v1 = normalize(vec3(1.0,0.0,gx));
+    	  vec3 v2 = normalize(vec3(0.0,1.0,gy));
+
+        return cross(v1,v2);
+      }
+
+      void main(void) {
+    	  // décalage avec la variable uOffset
+    	  vec2 p = vTextureCoord*2.0-vec2(1.0)+uOffset;
+        vec3 Kd = vec3(0.2,0.18,0.15);
+
+    	  float d = computeHeight(p); // profondeur au point p
+    	  vec3 n = computeNormal(p); // normale au point p
+
+    	  // affichage de la profondeur
+    	  outColor = vec4(d,d,random(vec2(4.,3.)),1);
+
+    	  // affichage de la normale
+    	  //outColor = vec4(1.,0.,0.,0.3);
+      }
+
+    </script>
+
+    <script id="model-vs" type="x-shader/x-vertex">#version 300 es
+      // *** le vertex shader ***
+      layout(location=0) in vec3 aVertexPosition;
+      layout(location=1) in vec3 aVertexNormal;
+
+      uniform mat4 uModelMatrix;
+      uniform mat4 uViewMatrix;
+      uniform mat4 uProjMatrix;
+
+      out vec3 vNormal;
+
+      void main(void) {
+          // projection de la position
+          gl_Position = uProjMatrix * uViewMatrix * uModelMatrix * vec4(aVertexPosition, 1.0);
+          vNormal = mat3(inverse(transpose(uViewMatrix * uModelMatrix)))*normalize(aVertexNormal);
+      }
+    </script>
+
+    <script id="model-fs" type="x-shader/x-fragment">#version 300 es
+      // *** le fragment shader ***
+      precision mediump float; // precision des nombres flottant
+
+      in vec3 vNormal;
+      out vec4 outColor;
+
+      void main(void) {
+          // la couleur est attribuee au fragment courant
+           vec3 n = normalize(vNormal);
+
+          // pour le moment, on affiche juste la normale
+          outColor = vec4(n,1.);
+      }
+    </script>
+
+    <script id="enemy-vs" type="x-shader/x-vertex">#version 300 es
+      // *** le vertex shader ***
+      layout(location=0) in vec3 aVertexPosition;
+      layout(location=1) in vec3 aVertexNormal;
+
+      uniform mat4 uEnemyMatrix;
+      uniform mat4 uViewEnemyMatrix;
+      uniform mat4 uProjEnemyMatrix;
+
+      out vec3 vNormal;
+
+      void main(void) {
+          // projection de la position
+          gl_Position = uProjEnemyMatrix * uViewEnemyMatrix * uEnemyMatrix * vec4(aVertexPosition, 1.0);
+          vNormal = mat3(inverse(transpose(uViewEnemyMatrix * uEnemyMatrix)))*normalize(aVertexNormal);
+      }
+    </script>
+
+    <script id="enemy-fs" type="x-shader/x-fragment">#version 300 es
+      // *** le fragment shader ***
+      precision mediump float; // precision des nombres flottant
+
+      in vec3 vNormal;
+      out vec4 outColor;
+
+      void main(void) {
+          // la couleur est attribuee au fragment courant
+           vec3 n = normalize(vNormal);
+
+          // pour le moment, on affiche juste la normale
+          outColor = vec4(n,1.);
+      }
+    </script>
+
+    <script id="splat-vs" type="x-shader/x-vertex">#version 300 es
+      // *** le vertex shader ***
+      layout(location=0) in vec3 aVertexPosition; // la position du sommet
+      layout(location=1) in vec2 aVertexCoord; // sa coordonnee de texture
+
+      uniform vec3 uPositionSplat; // position du vaisseau
+      out vec2 vTextureCoord; // on souhaite rasteriser la coordonnee
+
+      void main(void) {
+    	  // projection de la position
+    	  gl_Position = vec4(aVertexPosition.xy+uPositionSplat.xy,uPositionSplat.z, 1.0);
+
+    	  // stockage de la coordonnee de texture
+    	  vTextureCoord = aVertexCoord;
+      }
+    </script>
+
+    <script id="splat-fs" type="x-shader/x-fragment">#version 300 es
+      // *** le fragment shader ***
+      precision highp float; // precision des nombres flottant
+
+      uniform vec3 maCouleur;
+      uniform sampler2D uTex;
+
+      in vec2 vTextureCoord; // recuperation de la coord rasterisee
+      out vec4 outColor;
+
+      void main(void) {
+        float alpha = 1.-smoothstep(0.2,0.25,distance(vec2(.5),vTextureCoord));
+
+    	  // TEST: affichage d'un point avec la couleur donn�e en param�tre
+    	  //outColor = vec4(alpha*maCouleur,alpha);
+
+    	  // TEST: affichage d'une texture donn�e en param�tre
+    	  outColor = texture(uTex,vTextureCoord);
+      }
+    </script>
+
+    <script type="text/javascript">
+
+    var background;
+    var spaceship;
+    var enemies = [];
+    var shootSample;
+
+    function drawScene() {
+  	  // initialisation du viewport
+  	  gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+
+  	  // efface les buffers de couleur et de profondeur
+  	  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+  	  // dessin du fond (décommenter pour travailler dessus)
+  	  gl.useProgram(background.shader());
+  	  background.sendUniformVariables();
+  	  background.draw();
+
+  	  // dessin du vaisseau
+  	  gl.useProgram(spaceship.shader());
+      spaceship.sendUniformVariables();
+  	  spaceship.draw();
+
+      // dessin ds ennemis
+      enemies.forEach((enemy) => {
+        gl.useProgram(enemy.shader());
+        enemy.sendUniformVariables();
+    	  enemy.draw();
+      });
+
+  	  // test pour afficher un splat quand on appuie sur espace
+  	  gl.enable(gl.BLEND); // transparence activ�e
+  	  gl.useProgram(shootSample.shader());
+      shootSample.sendUniformVariables();
+  	  shootSample.draw();
+  	  gl.disable(gl.BLEND); // transparence d�sactiv�e
+    }
+
+    // une bonne maniere de gerer les evenements claviers
+    var currentlyPressedKeys = {};
+
+    function handleKeyDown(event) {
+        currentlyPressedKeys[event.keyCode] = true;
+    }
+
+    function handleKeyUp(event) {
+        currentlyPressedKeys[event.keyCode] = false;
+    }
+
+    function handleKeys() {
+  	  // vous pouvez utiliser ce genre de fonction
+  	  // pour faire bouger votre vaisseau
+  	  // par exemple :
+
+  	  if (currentlyPressedKeys[68]) { // D
+          spaceship.move(1,0);
+      }
+
+  	  if (currentlyPressedKeys[81]) { // Q
+          spaceship.move(-1,0);
+      }
+
+  	  if (currentlyPressedKeys[90]) { // Z
+          spaceship.move(0,1);
+      }
+
+  	  if (currentlyPressedKeys[83]) { // S
+          spaceship.move(0,-1);
+      }
+
+  	  if (currentlyPressedKeys[77]) { // M
+          // juste un test pour supprimer un splat (tir)
+          shootSample.clear();
+      }
+
+  	  if (currentlyPressedKeys[32]) { // SPACE
+        // exemple: comment positionner un splat devant le vaisseau
+        var p = spaceship.getBBox(); // boite englobante du vaisseau sur l'�cran
+        var x = (p[0][0]+p[1][0])/2;
+        var y = p[1][1];
+        var z = p[1][2]+0.005; // profondeur du splat (juste derri�re le vaisseau)
+
+        shootSample.setPosition(x,y,z);
+      }
+
+    }
+
+    function mouseMove(event) {
+      // recup evenement souris
+      var newx = 2.0*(event.clientX/gl.viewportWidth)-1.0;
+      var newy = -(2.0*(event.clientY/gl.viewportHeight)-1.0);
+      spaceship.move(newx,newy);
+    }
+
+
+    // animation
+    var lastTime = 0;
+    function animate() {
+      // fonction appel�e � chaque frame, permet d'animer la sc�ne
+      var timeNow = new Date().getTime();
+      if (lastTime != 0) {
+          // anime chacun des objets de la scene
+          // si necessaire (en fonction du temps ecoul�)
+          var elapsed = timeNow - lastTime;
+          spaceship.setParameters(elapsed);
+          enemies.forEach((enemy) => {
+            enemy.setParameters(elapsed);
+          });
+          background.setParameters(elapsed);
+          shootSample.setParameters(elapsed);
+
+      }
+      lastTime = timeNow;
+    }
+
+    function tick() {
+        requestAnimFrame(tick);
+        handleKeys();
+        drawScene();
+        animate();
+    }
+
+
+    function webGLStart() {
+        // initialisation du canvas et des objets OpenGL
+        var canvas = document.getElementById("SpaceShip");
+        initGL(canvas);
+
+    	  // test: création d'une texture
+    	  var tex = initTexture('textures/missile.png');
+
+        var nbEnemies = 5;
+
+        initBackgroundShader();
+        initModelShader();
+        initEnemyShader();
+        initSplatShader();
+
+        //heightfield = new Heightfield();
+        background = new Background();
+        spaceship = new Model('models/plane.obj');
+        for(var i = 0; i < nbEnemies; i++) {
+          enemies.push(new Enemy('models/plane.obj'));
+        }
+
+        shootSample = new Splat(tex);
+
+        // la couleur de fond sera grise fonc�e
+        gl.clearColor(0.3, 0.3, 0.3, 1.0);
+
+        // active le test de profondeur
+        gl.enable(gl.DEPTH_TEST);
+
+        // fonction de m�lange utilis�e pour la transparence
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+        /* Mouse and keyboard interaction functions */
+        //canvas.addEventListener('mousedown', tbMouseDown, true);
+        //canvas.addEventListener('mousemove', mouseMove, true);
+        //canvas.addEventListener('mouseup', tbMouseUp, true);
+        document.onkeydown = handleKeyDown;
+        document.onkeyup = handleKeyUp;
+
+        // dessine la scene
+        tick();
+    }
+
+
+    </script>
+
+
+  </head>
+
+
+  <body onload="webGLStart();">
+    <canvas id="SpaceShip" style="border: none;" width="800" height="800"></canvas>
+</body></html>
