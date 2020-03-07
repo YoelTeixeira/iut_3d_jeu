@@ -108,7 +108,7 @@ Enemy.prototype.initParameters = function() {
 
     // on utilise des variables pour se rappeler quelles sont les transformations courantes
     // rotation, translation, scaling de l'objet
-    this.position = [Math.floor(Math.random() * (3 - 1 + 1) + 0),5,0]; // l'ennemi apparait en haut et de manière aléatoire pour l'axe latéral
+    this.position = [Math.floor(Math.random() * (3 - 1 + 1) + 0),this.bbmax[0],0]; // l'ennemi apparait en haut et de manière aléatoire pour l'axe latéral
     this.rotationY = 0.; // angle de rotation en radian autour de l'axe Y
     this.rotationX = 0.3; // angle de rotation en radian autour de l'axe X
     this.rotationZ = 3.15; // angle de rotation en radian autour de l'axe Z
@@ -120,13 +120,19 @@ Enemy.prototype.setParameters = function(elapsed) {
     // mise à jour de la matrice modèle avec les paramètres de transformation
     // les matrices view et projection ne changent pas
 
+    // Suppression si l'ennemi n'est plus dans le cadre du jeu
+    if(this.position !== undefined && this.position[1] < this.bbmin[0]) {
+      this.clear();
+    }
+
     this.move(-1,0); // Mouvement continu de l'ennemi du haut vers le bas
 
     // creation des matrices rotation/translation/scaling
     var rMat = mat4.rotate(mat4.identity(),this.rotationY,[0,1,0]);
     var rxMat = mat4.rotate(mat4.identity(),this.rotationX,[1,0,0]);
     var rzMat = mat4.rotate(mat4.identity(),this.rotationZ,[0,0,1]);
-    var tMat = mat4.translate(mat4.identity(),[this.position[0],this.position[1],this.position[2]]);
+    if(this.position !== undefined)
+      var tMat = mat4.translate(mat4.identity(),[this.position[0],this.position[1],this.position[2]]);
     var sMat = mat4.scale(mat4.identity(),[this.scale,this.scale,this.scale]);
 
     // on applique les transformations successivement
@@ -135,7 +141,8 @@ Enemy.prototype.setParameters = function(elapsed) {
     this.enemyMatrix = mat4.multiply(rMat,this.enemyMatrix);
     this.enemyMatrix = mat4.multiply(rxMat,this.enemyMatrix);
     this.enemyMatrix = mat4.multiply(rzMat,this.enemyMatrix);
-    this.enemyMatrix = mat4.multiply(tMat,this.enemyMatrix);
+    if(this.position !== undefined)
+      this.enemyMatrix = mat4.multiply(tMat,this.enemyMatrix);
 
 }
 
@@ -144,7 +151,8 @@ Enemy.prototype.move = function(x,y) {
     this.rotationY += x*0.15; // permet de tourner autour de l'axe Y
     this.rotationX += y*0.15;
     //this.position[0] += x*0.2; // translation gauche/droite
-    this.position[1] += x*0.03; // translation haut/bas
+    if(this.position !== undefined)
+      this.position[1] += x*0.03; // translation haut/bas
 }
 
 Enemy.prototype.getBBox = function() {

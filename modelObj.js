@@ -10,6 +10,7 @@ function initModelShader() {
     modelShader.modelMatrixUniform = gl.getUniformLocation(modelShader, "uModelMatrix");
     modelShader.viewMatrixUniform = gl.getUniformLocation(modelShader, "uViewMatrix");
     modelShader.projMatrixUniform = gl.getUniformLocation(modelShader, "uProjMatrix");
+    modelShader.colorUniform = gl.getUniformLocation(modelShader, "uColor");
 
     console.log("model shader initialized");
 }
@@ -44,11 +45,11 @@ Model.prototype.computeBoundingBox = function(vertices) {
     for(i=3;i<vertices.length;i+=3) {
     	for(j=0;j<3;j++) {
     	    if(vertices[i+j]>this.bbmax[j]) {
-    		this.bbmax[j] = vertices[i+j];
+  		      this.bbmax[j] = vertices[i+j];
     	    }
 
     	    if(vertices[i+j]<this.bbmin[j]) {
-    		this.bbmin[j] = vertices[i+j];
+  		      this.bbmin[j] = vertices[i+j];
     	    }
     	}
     }
@@ -109,6 +110,7 @@ Model.prototype.initParameters = function() {
     // on utilise des variables pour se rappeler quelles sont les transformations courantes
     // rotation, translation, scaling de l'objet
     this.position = [0,0,0]; // position de l'objet dans l'espace
+    this.color = [0.4, 0.2, 0.1, 1.0];
     this.rotation = 0.; // angle de rotation en radian autour de l'axe Y
     this.rotationX = -0.4; // angle de rotation en radian autour de l'axe X
     this.scale = 0.2; // mise à l'echelle (car l'objet est trop  gros par défaut)
@@ -141,6 +143,27 @@ Model.prototype.move = function(x,y) {
     this.position[1] += y*0.2; // translation haut/bas
 }
 
+Model.prototype.up = function() {
+  if(this.rotationX < 0.4) {
+    this.rotationX += 0.3;
+  }
+}
+
+Model.prototype.down = function() {
+  if(this.rotationX > -0.8) {
+    this.rotationX -= 0.3;
+  }
+}
+
+Model.prototype.resetSlope = function() {
+  if(this.rotationX > -0.4) {
+    this.rotationX -= 0.02;
+  }
+  if(this.rotationX < -0.4) {
+    this.rotationX += 0.02;
+  }
+}
+
 Model.prototype.getBBox = function() {
     return [this.bbminP,this.bbmaxP];
 }
@@ -157,6 +180,9 @@ Model.prototype.sendUniformVariables = function() {
     	gl.uniformMatrix4fv(modelShader.modelMatrixUniform,false,this.modelMatrix);
     	gl.uniformMatrix4fv(modelShader.viewMatrixUniform,false,this.viewMatrix);
     	gl.uniformMatrix4fv(modelShader.projMatrixUniform,false,this.projMatrix);
+
+      // Paramètres utilisés dans le fragment shader
+      gl.uniform4fv(backgroundShader.colorUniform,this.color);
 
     	// calcul de la boite englobante (projetée)
     	mat4.multiplyVec4(m,[this.bbmin[0],this.bbmin[1],this.bbmin[2],1],this.bbminP);
@@ -185,9 +211,9 @@ Model.prototype.shader = function() {
 Model.prototype.draw = function() {
     // cette fonction dit à la carte graphique de dessiner le vaisseau (déjà stocké en mémoire)
     if(this.loaded) {
-	gl.bindVertexArray(this.vao);
-	gl.drawArrays(gl.TRIANGLES,0,this.vertexBuffer.numItems)
-	gl.bindVertexArray(null);
+    	gl.bindVertexArray(this.vao);
+    	gl.drawArrays(gl.TRIANGLES,0,this.vertexBuffer.numItems)
+    	gl.bindVertexArray(null);
     }
 }
 
@@ -215,53 +241,53 @@ Model.prototype.load = function(filename) {
 
                 var lines = data.split("\n");
 
-		var positions = [];
-		var normals = [];
-		var arrayVertex = []
-		var arrayNormal = [];
+            		var positions = [];
+            		var normals = [];
+            		var arrayVertex = []
+            		var arrayNormal = [];
 
-		for ( var i = 0 ; i < lines.length ; i++ ) {
-		    var parts = lines[i].trimRight().split(' ');
-		    if ( parts.length > 0 ) {
-			switch(parts[0]) {
-			case 'v':  positions.push(
-			    vec3.create([
-				parseFloat(parts[1]),
-				parseFloat(parts[2]),
-				parseFloat(parts[3])]
-			    ));
-			    break;
-			case 'vn':
-			    normals.push(
-				vec3.create([
-				    parseFloat(parts[1]),
-				    parseFloat(parts[2]),
-				    parseFloat(parts[3])]
-				));
-			    break;
-			case 'f': {
-			    var f1 = parts[1].split('/');
-			    var f2 = parts[2].split('/');
-			    var f3 = parts[3].split('/');
-			    Array.prototype.push.apply(arrayVertex,positions[parseInt(f1[0])-1]);
-			    Array.prototype.push.apply(arrayVertex,positions[parseInt(f2[0])-1]);
-			    Array.prototype.push.apply(arrayVertex,positions[parseInt(f3[0])-1]);
+            		for ( var i = 0 ; i < lines.length ; i++ ) {
+            		    var parts = lines[i].trimRight().split(' ');
+            		    if ( parts.length > 0 ) {
+            			switch(parts[0]) {
+            			case 'v':  positions.push(
+            			    vec3.create([
+            				parseFloat(parts[1]),
+            				parseFloat(parts[2]),
+            				parseFloat(parts[3])]
+            			    ));
+            			    break;
+            			case 'vn':
+            			    normals.push(
+            				vec3.create([
+            				    parseFloat(parts[1]),
+            				    parseFloat(parts[2]),
+            				    parseFloat(parts[3])]
+            				));
+            			    break;
+            			case 'f': {
+            			    var f1 = parts[1].split('/');
+            			    var f2 = parts[2].split('/');
+            			    var f3 = parts[3].split('/');
+            			    Array.prototype.push.apply(arrayVertex,positions[parseInt(f1[0])-1]);
+            			    Array.prototype.push.apply(arrayVertex,positions[parseInt(f2[0])-1]);
+            			    Array.prototype.push.apply(arrayVertex,positions[parseInt(f3[0])-1]);
 
-			    Array.prototype.push.apply(arrayNormal,normals[parseInt(f1[2])-1]);
-			    Array.prototype.push.apply(arrayNormal,normals[parseInt(f2[2])-1]);
-			    Array.prototype.push.apply(arrayNormal,normals[parseInt(f3[2])-1]);
-			    break;
-			}
-			default: break;
-			}
-		    }
-		}
+            			    Array.prototype.push.apply(arrayNormal,normals[parseInt(f1[2])-1]);
+            			    Array.prototype.push.apply(arrayNormal,normals[parseInt(f2[2])-1]);
+            			    Array.prototype.push.apply(arrayNormal,normals[parseInt(f3[2])-1]);
+            			    break;
+            			}
+            			default: break;
+            			}
+            		    }
+            		}
 
-		var objData = [
-		    new Float32Array(arrayVertex),
-		    new Float32Array(arrayNormal)
-		]
-		instance.handleLoadedObject(objData);
+            		var objData = [
+            		    new Float32Array(arrayVertex),
+            		    new Float32Array(arrayNormal)
+            		]
+            		instance.handleLoadedObject(objData);
 
             }
         }

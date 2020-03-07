@@ -103,6 +103,13 @@ Background.prototype.draw = function() {
     gl.bindVertexArray(null);
 }
 
+Background.prototype.up = function() {
+    this.frequency += 0.03;
+}
+
+Background.prototype.down = function() {
+    this.frequency -= 0.03;
+}
 
 Background.prototype.clear = function() {
     // clear all GPU memory

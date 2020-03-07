@@ -72,7 +72,6 @@
       }
 
 
-
       float computeHeight(in vec2 p) {
         // vous pouvez modifier cette fonction comme vous
         // le souhaitez pour fabriquer votre propre background
@@ -85,9 +84,9 @@
         return test;
       }
 
-      void computeMaterialParams(in float d, out vec3 Kd, out vec3 Ks, out float s){
-        vec3 col1 = vec3(0.6,0.35,0.35);
-        vec3 col2 = vec3(0.92,0.95,0.95);
+      void computeMaterialParams(in float d, out vec3 Kd, out vec3 Ks, out float s) {
+        vec3 col1 = vec3(0.6,0.35,0.35); // couleur
+        vec3 col2 = vec3(0.92,0.95,0.95); // couleur sommets montagnes
 
         Kd = mix(col1,col2, smoothstep(-0.5,2.0,d));
         Ks = vec3(0.1);
@@ -130,14 +129,14 @@
 
     	  // affichage de la normale
         //outColor = vec4(1.,0.,0.,0.3); */
-        
+
         vec3 Kd = vec3(0.7,0.6,0.55);
         vec3 Ks = vec3(0.0);
         float s = 100.0;
 
         // d�calage avec la variable uOffset
         vec2 p = vTextureCoord*2.0-vec2(1.0)+uOffset;
-        
+
         float d = computeHeight(p); // profondeur au point p
         vec3 n = computeNormal(p); // normale au point p
 
@@ -184,11 +183,12 @@
       precision mediump float; // precision des nombres flottant
 
       in vec3 vNormal;
+      uniform vec4 uColor;
       out vec4 outColor;
 
       void main(void) {
           // la couleur est attribuee au fragment courant
-           vec3 n = normalize(vNormal);
+          vec3 n = normalize(vec3(vNormal.x*uColor.x, vNormal.y*uColor.y, vNormal.z*uColor.z));
 
           // pour le moment, on affiche juste la normale
           outColor = vec4(n,1.);
@@ -338,9 +338,26 @@
           spaceship.move(0,-1);
       }
 
-  	  if (currentlyPressedKeys[77]) { // M
-          // juste un test pour supprimer un splat (tir)
-          shootSample.clear();
+      // Appuie sur la touche
+  	  if (currentlyPressedKeys[38]) { // flèche haut
+          background.up();
+          spaceship.up();
+      }
+
+      // Appuie sur la touche
+      if (currentlyPressedKeys[40]) { // flèche bas
+          background.down();
+          spaceship.down();
+      }
+
+      // Relache la touche
+      if (!currentlyPressedKeys[38]) { // flèche haut
+        spaceship.resetSlope();
+      }
+
+      // Relache la touche
+      if (!currentlyPressedKeys[40]) { // flèche bas
+        spaceship.resetSlope();
       }
 
   	  if (currentlyPressedKeys[32]) { // SPACE
@@ -399,7 +416,7 @@
     	  // test: création d'une texture
     	  var tex = initTexture('textures/missile.png');
 
-        var nbEnemies = 5;
+        var nbEnemies = 1;
 
         initBackgroundShader();
         initModelShader();
@@ -409,9 +426,13 @@
         //heightfield = new Heightfield();
         background = new Background();
         spaceship = new Model('models/plane.obj');
-        for(var i = 0; i < nbEnemies; i++) {
-          enemies.push(new Enemy('models/plane.obj'));
-        }
+
+        setInterval(function() {
+          for(var i = 0; i < nbEnemies; i++) {
+            enemies.push(new Enemy('models/plane.obj'));
+          }
+        }, 2000);
+
 
         shootSample = new Splat(tex);
 
